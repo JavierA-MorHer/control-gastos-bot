@@ -36,87 +36,76 @@ async def twilio_webhook(
     else:
         # 3. Si ya existe, tratamos de guardar su gasto
         try:
-            # Parseo Avanzado con Inteligencia Artificial (Gemini)
-            from services.ai_parser import analizar_mensaje_gasto, generar_consejo_financiero
-            from datetime import datetime
+            # Parseo básico con split en vez de IA, para ahorrar créditos
+            partes = [p.strip() for p in Body.split('-')]
             
-            datos_ia = await analizar_mensaje_gasto(Body)
-            intencion = datos_ia.get("intencion", "OTRO")
-            
-            if intencion == "GASTO":
-                monto = datos_ia["monto"]
-                categoria = datos_ia["categoria"]
-                descripcion = datos_ia["descripcion"]
-                
-                # Si Gemini decide que no hay monto
-                if monto <= 0.0:
-                    respuesta_texto = "¡Hola! Entendí tu mensaje, pero no detecté ningún gasto que guardar. Dime qué compraste y cuánto costó. (Ej: 'Pizza 300')"
-                else:
-                    nuevo_gasto = Gasto(
-                        usuario_id=usuario.id,
-                        monto=monto,
-                        categoria=categoria,
-                        descripcion=descripcion,
-                        mensaje_original=Body
-                    )
-                    db.add(nuevo_gasto)
-                    await db.commit()
+            if len(partes) >= 3:
+                # Asumimos que es formato 'Monto - Categoría - Descripción [- Fecha]'
+                try:
+                    monto = float(partes[0].replace('$', '').replace(',', ''))
+                    categoria = partes[1].title()
                     
-                    respuesta_texto = f"Se guardó un gasto por ${monto:,.2f} en la categoría '{categoria}'. ({descripcion})"
+                    # Intentar leer fecha desde la última parte
+                    from datetime import datetime
+                    fecha_obj = None
+                    posible_fecha = partes[-1].replace('-', '/')
+                    try:
+                        fecha_obj = datetime.strptime(posible_fecha, "%d/%m/%Y")
+                        descripcion = '-'.join(partes[2:-1]).strip()
+                    except ValueError:
+                        descripcion = '-'.join(partes[2:]).strip()
                     
-            elif intencion == "REPORTE_GENERAL":
-                respuesta_texto = "¿De qué periodo quieres tu reporte? 🗓️ Puedes decirme: 'gastos de ayer', 'mi reporte semanal', o 'gastos de marzo'."
-                
-            elif intencion == "REPORTE_ESPECIFICO":
-                f_inicio_str = datos_ia.get("fecha_inicio")
-                f_fin_str = datos_ia.get("fecha_fin")
-                
-                if not f_inicio_str or not f_fin_str:
-                    respuesta_texto = "Entendí que quieres un reporte, pero la IA no logró captar las fechas exactas. Intenta algo como 'mis gastos de ayer'."
-                else:
-                    # Convertimos string YYYY-MM-DD a datetime
-                    # El inicio del día 00:00:00
-                    f_inicio_dt = datetime.strptime(f_inicio_str, "%Y-%m-%d")
-                    # El final del día 23:59:59
-                    f_fin_dt = datetime.strptime(f_fin_str, "%Y-%m-%d").replace(hour=23, minute=59, second=59)
+                    if not descripcion:
+                        descripcion = "Sin descripción"
                     
-                    # Consultamos base de datos
-                    query = select(Gasto).filter(
-                        Gasto.usuario_id == usuario.id,
-                        Gasto.fecha_gasto >= f_inicio_dt,
-                        Gasto.fecha_gasto <= f_fin_dt
-                    )
-                    resultado_gastos = await db.execute(query)
-                    lista_gastos = resultado_gastos.scalars().all()
-                    
-                    if not lista_gastos:
-                        respuesta_texto = f"Revisé tus registros del {f_inicio_str} al {f_fin_str} y no tienes ningún gasto. ¡Qué buen ahorro! 💸"
+                    if monto <= 0.0:
+                         respuesta_texto = "Por favor, ingresa un monto mayor a 0."
                     else:
-                        # Agrupar por categoría
-                        totales_cat = {}
-                        total_general = 0.0
-                        for g in lista_gastos:
-                            cat = g.categoria
-                            totales_cat[cat] = totales_cat.get(cat, 0.0) + float(g.monto)
-                            total_general += float(g.monto)
+                        nuevo_gasto = Gasto(
+                            usuario_id=usuario.id,
+                            monto=monto,
+                            categoria=categoria,
+                            descripcion=descripcion,
+                            mensaje_original=Body
+                        )
+                        if fecha_obj:
+                            nuevo_gasto.fecha_gasto = fecha_obj
                             
-                        # Resumen crudo
-                        resumen = f"Periodo: {f_inicio_str} al {f_fin_str}\n"
-                        for cat, tot in totales_cat.items():
-                            resumen += f"- {cat}: ${tot:,.2f}\n"
-                        resumen += f"TOTAL GASTADO: ${total_general:,.2f}"
+                        db.add(nuevo_gasto)
+                        await db.commit()
                         
-                        # Segunda llamada IA
-                        respuesta_texto = await generar_consejo_financiero(resumen)
+                        fecha_str = f" con fecha {fecha_obj.strftime('%d/%m/%Y')}" if fecha_obj else ""
+                        respuesta_texto = f"Se guardó un gasto por ${monto:,.2f} en la categoría '{categoria}'{fecha_str}. ({descripcion})"
+                except ValueError:
+                    respuesta_texto = "No pude entender el monto. Recuerda usar el formato 'Monto - Categoría - Descripción [- Fecha DD/MM/YYYY opcional]'. (Ej: 300 - Comida - Pizza - 25/03/2026)"
+                    
+            elif Body.lower().strip() == "reporte":
+                # Lógica simple de reporte de todos los gatos que hay
+                query = select(Gasto).filter(Gasto.usuario_id == usuario.id)
+                resultado_gastos = await db.execute(query)
+                lista_gastos = resultado_gastos.scalars().all()
+                
+                if not lista_gastos:
+                    respuesta_texto = "No tienes ningún gasto registrado aún."
+                else:
+                    totales_cat = {}
+                    total_general = 0.0
+                    for g in lista_gastos:
+                        cat = g.categoria
+                        totales_cat[cat] = totales_cat.get(cat, 0.0) + float(g.monto)
+                        total_general += float(g.monto)
                         
-            else: # intencion == OTRO
-                respuesta_texto = "¡Hola! Conmigo puedes registrar tus gastos diarios (ej. 'comí en la calle 250') o pedirme reportes (ej. 'cuánto he gastado esta semana')."
+                    resumen = "Resumen de todos tus gastos:\n"
+                    for cat, tot in totales_cat.items():
+                        resumen += f"- {cat}: ${tot:,.2f}\n"
+                    resumen += f"\nTOTAL GASTADO: ${total_general:,.2f}"
+                    
+                    respuesta_texto = resumen
+            else:
+                respuesta_texto = "¡Hola! Para registrar un gasto usa: 'Monto - Categoría - Descripción [- Fecha DD/MM/YYYY opcional]' (Ej: 300 - Comida - Pizza - 20/03/2026). Para ver tu historial envía 'Reporte'."
             
-        except ValueError as e:
-            # Si falta la API Key o falla el parseo
-            respuesta_texto = f"Error: {str(e)}"
         except Exception as e:
-             respuesta_texto = f"❌ Error interno procesando el gasto con la IA: {str(e)}"
+             respuesta_texto = f"❌ Error interno procesando el gasto: {str(e)}"
 
     # 4. Enviamos la respuesta de vuelta a Twilio usando TwiML (XML)
     response = MessagingResponse()
