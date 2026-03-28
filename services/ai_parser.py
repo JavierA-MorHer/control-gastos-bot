@@ -18,12 +18,12 @@ Si el mensaje del usuario no parece ser un gasto sino un saludo (hola, buen día
 """
 
 # Inicializamos el modelo de IA (flash es la versión más rápida y recomendada para esto)
-# Usando "gemini-1.5-flash" porque soporta "response_mime_type" y "system_instruction"
+# Usando "gemini-2.5-flash" porque soporta "response_mime_type" y "system_instruction"
 try:
-    model = genai.GenerativeModel('gemini-1.5-flash', system_instruction=system_instruction)
+    model = genai.GenerativeModel('gemini-2.5-flash', system_instruction=system_instruction)
 except Exception:
     # Fallback si por alguna razón falla el modelo con system instruct
-    model = genai.GenerativeModel('gemini-1.5-flash')
+    model = genai.GenerativeModel('gemini-2.5-flash')
 
 async def analizar_mensaje_gasto(texto: str) -> dict:
     """Consulte la IA Gemini para entender el mensaje y extraer JSON."""
