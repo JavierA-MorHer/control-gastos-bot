@@ -35,30 +35,37 @@ async def twilio_webhook(
         respuesta_texto = "¡Hola! Veo que es tu primera vez por aquí. Ya te registré en la base de datos de Neon. Para guardar un gasto envíame algo con el formato: 'Monto - Categoría - Descripción'."
     else:
         # 3. Si ya existe, tratamos de guardar su gasto
-        # (Aquí podrías meter IA en el futuro para extraer los datos del texto solo)
         try:
-            # Parseo básico que asume el formato 'Monto - Categoría - Descripción'
-            partes = Body.split("-")
-            monto = float(partes[0].strip())
-            categoria = partes[1].strip() if len(partes) > 1 else "Sin categoría"
-            descripcion = partes[2].strip() if len(partes) > 2 else ""
+            # 3. Parseo Avanzado con Inteligencia Artificial (Gemini)
+            from services.ai_parser import analizar_mensaje_gasto
             
-            # Guardamos el gasto en la DB conectado con el usuario_id
-            nuevo_gasto = Gasto(
-                usuario_id=usuario.id,
-                monto=monto,
-                categoria=categoria,
-                descripcion=descripcion,
-                mensaje_original=Body
-            )
-            db.add(nuevo_gasto)
-            await db.commit()
+            datos_gasto = await analizar_mensaje_gasto(Body)
+            monto = datos_gasto["monto"]
+            categoria = datos_gasto["categoria"]
+            descripcion = datos_gasto["descripcion"]
             
-            respuesta_texto = f"✅ Gasto por ${monto} guardado exitosamente en '{categoria}'."
+            # Si Gemini decide que no hay monto, es un mensaje general/saludo
+            if monto <= 0.0:
+                respuesta_texto = "¡Hola! Entendí tu mensaje, pero no detecté ningún gasto que guardar. Dime qué compraste y cuánto costó. (Ej: 'Pizza 300' o '150 en la farmacia')"
+            else:
+                # Guardamos el gasto en la DB conectado con el usuario_id
+                nuevo_gasto = Gasto(
+                    usuario_id=usuario.id,
+                    monto=monto,
+                    categoria=categoria,
+                    descripcion=descripcion,
+                    mensaje_original=Body
+                )
+                db.add(nuevo_gasto)
+                await db.commit()
+                
+                respuesta_texto = f"Se guardó un gasto por ${monto:,.2f} en la categoría '{categoria}'. ({descripcion})"
             
-        except ValueError:
-            # Si el texto no empieza con un número
-             respuesta_texto = "❌ No entendí el formato. Por favor usa: Monto - Categoría - Descripción (Ej: '150 - Comida - Pizza')"
+        except ValueError as e:
+            # Si falta la API Key o falla el parseo
+            respuesta_texto = f"Error: {str(e)}"
+        except Exception as e:
+             respuesta_texto = f"❌ Error interno procesando el gasto con la IA: {str(e)}"
 
     # 4. Enviamos la respuesta de vuelta a Twilio usando TwiML (XML)
     response = MessagingResponse()
