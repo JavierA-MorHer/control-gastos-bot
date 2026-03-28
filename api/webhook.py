@@ -45,18 +45,36 @@ async def twilio_webhook(
                     monto = float(partes[0].replace('$', '').replace(',', ''))
                     categoria = partes[1].title()
                     
-                    # Intentar leer fecha desde la última parte
+                    import re
                     from datetime import datetime
                     fecha_obj = None
-                    posible_fecha = partes[-1].replace('-', '/')
-                    try:
-                        fecha_obj = datetime.strptime(posible_fecha, "%d/%m/%Y")
-                        descripcion = '-'.join(partes[2:-1]).strip()
-                    except ValueError:
-                        descripcion = '-'.join(partes[2:]).strip()
                     
-                    if not descripcion:
-                        descripcion = "Sin descripción"
+                    # Unir toda la descripción (lo que sigue después de la categoría)
+                    descripcion_raw = '-'.join(partes[2:]).strip()
+                    
+                    # Extraer posible fecha al final de la descripción (ej. DD/MM, DD/MM/YYYY)
+                    match_fecha = re.search(r'\s*[-]?\s*(\d{1,2})[-/](\d{1,2})(?:[-/](\d{2,4}))?$', descripcion_raw)
+                    if match_fecha:
+                        dia = int(match_fecha.group(1))
+                        mes = int(match_fecha.group(2))
+                        anio_str = match_fecha.group(3)
+                        
+                        hoy = datetime.now()
+                        anio = int(anio_str) if anio_str else hoy.year
+                        if anio < 100:
+                            anio += 2000
+                            
+                        try:
+                            fecha_obj = datetime(anio, mes, dia)
+                            # Limpiar la descripción de la fecha
+                            descripcion_raw = descripcion_raw[:match_fecha.start()].strip()
+                            if descripcion_raw.endswith('-'):
+                                descripcion_raw = descripcion_raw[:-1].strip()
+                        except ValueError:
+                            # Fecha inválida (ej. 30/02), ignoramos
+                            pass
+                    
+                    descripcion = descripcion_raw if descripcion_raw else "Sin descripción"
                     
                     if monto <= 0.0:
                          respuesta_texto = "Por favor, ingresa un monto mayor a 0."
@@ -77,16 +95,47 @@ async def twilio_webhook(
                         fecha_str = f" con fecha {fecha_obj.strftime('%d/%m/%Y')}" if fecha_obj else ""
                         respuesta_texto = f"Se guardó un gasto por ${monto:,.2f} en la categoría '{categoria}'{fecha_str}. ({descripcion})"
                 except ValueError:
-                    respuesta_texto = "No pude entender el monto. Recuerda usar el formato 'Monto - Categoría - Descripción [- Fecha DD/MM/YYYY opcional]'. (Ej: 300 - Comida - Pizza - 25/03/2026)"
+                    respuesta_texto = "No pude entender el monto. Recuerda usar el formato 'Monto - Categoría - Descripción [DD/MM]'. (Ej: 300 - Comida - Pizza 20/03)"
                     
             elif Body.lower().strip() == "reporte":
-                # Lógica simple de reporte de todos los gatos que hay
+                respuesta_texto = "¿Qué tipo de reporte deseas ver? Responde con una de estas opciones:\n- Diario\n- Semanal\n- Mensual\n- Historico (para ver todo)"
+                
+            elif Body.lower().strip() in ["diario", "semanal", "mensual", "historico", "histórico"]:
+                tipo_reporte = Body.lower().strip()
+                # Quitamos el tilde si escribieron "histórico"
+                if tipo_reporte == "histórico":
+                    tipo_reporte = "historico"
+                    
+                from datetime import datetime, timedelta
+                
+                # Definir fechas límite en base al tipo de reporte
+                fecha_inicio = None
+                hoy = datetime.now()
+                
+                if tipo_reporte == "diario":
+                    fecha_inicio = hoy.replace(hour=0, minute=0, second=0, microsecond=0)
+                    titulo = f"Resumen Diario ({hoy.strftime('%d/%m/%Y')}):\n"
+                elif tipo_reporte == "semanal":
+                    # Últimos 7 días
+                    fecha_inicio = (hoy - timedelta(days=7)).replace(hour=0, minute=0, second=0, microsecond=0)
+                    titulo = "Resumen Semanal (Últimos 7 días):\n"
+                elif tipo_reporte == "mensual":
+                    # Desde el día 1 del mes actual
+                    fecha_inicio = hoy.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+                    titulo = f"Resumen Mensual (Desde el 01/{hoy.strftime('%m/%Y')}):\n"
+                else: 
+                    # "historico"
+                    titulo = "Resumen de todos tus gastos (Histórico):\n"
+                    
                 query = select(Gasto).filter(Gasto.usuario_id == usuario.id)
+                if fecha_inicio:
+                    query = query.filter(Gasto.fecha_gasto >= fecha_inicio)
+                    
                 resultado_gastos = await db.execute(query)
                 lista_gastos = resultado_gastos.scalars().all()
                 
                 if not lista_gastos:
-                    respuesta_texto = "No tienes ningún gasto registrado aún."
+                    respuesta_texto = "No tienes ningún gasto registrado en este periodo."
                 else:
                     totales_cat = {}
                     total_general = 0.0
@@ -95,14 +144,14 @@ async def twilio_webhook(
                         totales_cat[cat] = totales_cat.get(cat, 0.0) + float(g.monto)
                         total_general += float(g.monto)
                         
-                    resumen = "Resumen de todos tus gastos:\n"
+                    resumen = titulo
                     for cat, tot in totales_cat.items():
                         resumen += f"- {cat}: ${tot:,.2f}\n"
                     resumen += f"\nTOTAL GASTADO: ${total_general:,.2f}"
                     
                     respuesta_texto = resumen
             else:
-                respuesta_texto = "¡Hola! Para registrar un gasto usa: 'Monto - Categoría - Descripción [- Fecha DD/MM/YYYY opcional]' (Ej: 300 - Comida - Pizza - 20/03/2026). Para ver tu historial envía 'Reporte'."
+                respuesta_texto = "¡Hola! Para registrar un gasto usa: 'Monto - Categoría - Descripción [DD/MM]' (Ej: 300 - Comida - Pizza 20/03). Para ver tu historial envía 'Reporte'."
             
         except Exception as e:
              respuesta_texto = f"❌ Error interno procesando el gasto: {str(e)}"
