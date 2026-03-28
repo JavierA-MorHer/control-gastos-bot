@@ -8,7 +8,7 @@ class Usuario(Base):
     __tablename__ = "usuarios"
 
     id = Column(Integer, primary_key=True)
-    telefono_whatsapp = Column(String(20), unique=True, nullable=False)
+    telefono_whatsapp = Column(String(50), unique=True, nullable=False)
     nombre = Column(String(100), nullable=True)
     fecha_creacion = Column(DateTime, server_default=func.now())
 
