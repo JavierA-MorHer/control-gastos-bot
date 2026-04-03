@@ -6,6 +6,7 @@ y agrégalo al diccionario HANDLERS. Cero cambios en webhook.py.
 from handlers.alta_categoria import AltaCategoriaHandler
 from handlers.gasto import GastoHandler
 from handlers.presupuesto import PresupuestoHandler
+from handlers.consulta_presupuesto import ConsultaPresupuestoHandler
 from handlers.confirmacion import ConfirmacionHandler
 from handlers.reporte import ReporteGeneralHandler, ReporteEspecificoHandler
 from handlers.otro import OtroHandler
@@ -16,6 +17,7 @@ HANDLERS: dict[str, IntentHandler] = {
     "ALTA_CATEGORIA": AltaCategoriaHandler(),
     "GASTO": GastoHandler(),
     "PRESUPUESTO": PresupuestoHandler(),
+    "CONSULTA_PRESUPUESTO": ConsultaPresupuestoHandler(),
     "CONFIRMACION": ConfirmacionHandler(),
     "REPORTE_GENERAL": ReporteGeneralHandler(),
     "REPORTE_ESPECIFICO": ReporteEspecificoHandler(),
