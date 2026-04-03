@@ -56,6 +56,9 @@ async def limpiar_estado(db: AsyncSession, usuario: Usuario) -> None:
     await db.commit()
 
 
+from sqlalchemy.orm.attributes import flag_modified
+
+
 async def agregar_mensaje_historial(db: AsyncSession, usuario: Usuario, role: str, content: str) -> None:
     """
     Agrega un mensaje al historial de corto plazo.
@@ -71,8 +74,10 @@ async def agregar_mensaje_historial(db: AsyncSession, usuario: Usuario, role: st
         historial = historial[-6:]
         
     estado["historial"] = historial
-    # Validamos que Python asigne el nuevo dict para que SQLAlchemy note el cambio
-    usuario.estado_conversacion = dict(estado) 
+    usuario.estado_conversacion = estado
+    
+    # IMPORTANTE: Notificar a SQLAlchemy que la columna JSON mutó
+    flag_modified(usuario, "estado_conversacion")
     
     db.add(usuario)
     await db.commit()
