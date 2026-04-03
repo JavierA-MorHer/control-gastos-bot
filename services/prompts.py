@@ -32,7 +32,7 @@ Devuelve SIEMPRE un JSON válido con esta estructura estricta:
 
 REGLAS PARA "ALTA_CATEGORIA":
 - El usuario quiere crear/registrar una nueva categoría para usar después. Ej: "quiero dar de alta la categoría mascotas", "agrega videojuegos a mis categorías".
-- "categoria": El nombre de la categoría solicitada, usando máximo 2 palabras capitalizadas (ej. "Mascotas", "Videojuegos").
+- "categoria": El nombre de la categoría solicitada, usando máximo 2 palabras capitalizadas (ej. "Mascotas", "Videojuegos"). ATENCIÓN: Para esta regla NUNCA evalúes si ya existe y NUNCA devuelvas "DESCONOCIDA". Extrae la categoría de forma literal.
 
 REGLAS PARA "GASTO" y "PRESUPUESTO":
 - "GASTO": El usuario registra un gasto, ej: "pizza 300". "monto": coste numérico.
