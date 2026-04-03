@@ -8,7 +8,7 @@ from services.openai_client import get_openai_client
 from services.prompts import construir_prompt_clasificador, PROMPT_CONSEJERO
 
 
-async def analizar_mensaje(texto: str, categorias_usuario: list[str] | None = None) -> dict:
+async def analizar_mensaje(texto: str, categorias_usuario: list[str] | None = None, historial: list[dict] | None = None) -> dict:
     """
     Envía el mensaje del usuario a OpenAI y normaliza la respuesta
     en un diccionario con campos estandarizados.
@@ -21,7 +21,7 @@ async def analizar_mensaje(texto: str, categorias_usuario: list[str] | None = No
     mensaje_usuario = f"[INFO DEL SISTEMA: HOY ES {hoy}].\nMensaje del usuario: {texto}"
 
     try:
-        datos = await client.chat_json(prompt_sistema, mensaje_usuario)
+        datos = await client.chat_json(prompt_sistema, mensaje_usuario, history=historial)
 
         return {
             "intencion": str(datos.get("intencion", "OTRO")).upper(),

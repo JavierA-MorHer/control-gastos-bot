@@ -18,15 +18,17 @@ class OpenAIClient:
         self._client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
         self.model = "gpt-4o-mini"
 
-    async def chat_json(self, system: str, user: str) -> dict:
+    async def chat_json(self, system: str, user: str, history: list[dict] | None = None) -> dict:
         """Envía un chat y espera un JSON parseado como respuesta."""
+        messages = [{"role": "system", "content": system}]
+        if history:
+            messages.extend(history)
+        messages.append({"role": "user", "content": user})
+
         response = await self._client.chat.completions.create(
             model=self.model,
             response_format={"type": "json_object"},
-            messages=[
-                {"role": "system", "content": system},
-                {"role": "user", "content": user},
-            ],
+            messages=messages,
         )
         contenido = response.choices[0].message.content
         return json.loads(contenido)

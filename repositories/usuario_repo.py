@@ -37,13 +37,42 @@ async def obtener_o_crear(db: AsyncSession, telefono: str) -> tuple[Usuario, boo
 
 async def guardar_estado(db: AsyncSession, usuario: Usuario, estado: dict) -> None:
     """Guarda un estado temporal de conversación en el usuario."""
+    # Preservar el historial si existe
+    if usuario.estado_conversacion and "historial" in usuario.estado_conversacion:
+        estado["historial"] = usuario.estado_conversacion["historial"]
+    
     usuario.estado_conversacion = estado
     db.add(usuario)
     await db.commit()
 
 
 async def limpiar_estado(db: AsyncSession, usuario: Usuario) -> None:
-    """Limpia el estado temporal de conversación."""
-    usuario.estado_conversacion = None
+    """Limpia el estado temporal de conversación (preservando el historial)."""
+    if usuario.estado_conversacion and "historial" in usuario.estado_conversacion:
+        usuario.estado_conversacion = {"historial": usuario.estado_conversacion["historial"]}
+    else:
+        usuario.estado_conversacion = None
+    db.add(usuario)
+    await db.commit()
+
+
+async def agregar_mensaje_historial(db: AsyncSession, usuario: Usuario, role: str, content: str) -> None:
+    """
+    Agrega un mensaje al historial de corto plazo.
+    Mantiene un máximo de 6 mensajes (las últimas 3 interacciones).
+    """
+    estado = usuario.estado_conversacion or {}
+    historial = estado.get("historial", [])
+    
+    historial.append({"role": role, "content": content})
+    
+    # Mantener solo los últimos 6
+    if len(historial) > 6:
+        historial = historial[-6:]
+        
+    estado["historial"] = historial
+    # Validamos que Python asigne el nuevo dict para que SQLAlchemy note el cambio
+    usuario.estado_conversacion = dict(estado) 
+    
     db.add(usuario)
     await db.commit()

@@ -34,10 +34,17 @@ async def twilio_webhook(
     # 1. Obtener o crear usuario
     usuario, es_nuevo = await usuario_repo.obtener_o_crear(db, From)
 
+    # Registrar mensaje del usuario en el historial ANTES de analizar
+    if not es_nuevo:
+        await usuario_repo.agregar_mensaje_historial(db, usuario, "user", Body)
+
     if es_nuevo:
         respuesta_texto = MENSAJE_BIENVENIDA
     else:
         respuesta_texto = await _procesar_mensaje(db, usuario, Body)
+
+    # Registrar mensaje del asistente en el historial
+    await usuario_repo.agregar_mensaje_historial(db, usuario, "assistant", respuesta_texto)
 
     # 2. Responder con TwiML
     response = MessagingResponse()
@@ -51,8 +58,13 @@ async def _procesar_mensaje(db: AsyncSession, usuario, mensaje: str) -> str:
         # Obtener categorías del usuario para el prompt
         categorias = await categoria_repo.obtener_nombres(db, usuario.id)
 
+        # Extraer historial
+        historial = usuario.estado_conversacion.get("historial", []) if usuario.estado_conversacion else []
+        # Exigimos excluir el último porque es el actual mensaje del usuario que se acaba de guardar
+        historial_para_ia = historial[:-1] if historial else []
+
         # Analizar el mensaje con OpenAI
-        datos_ia = await analizar_mensaje(mensaje, categorias)
+        datos_ia = await analizar_mensaje(mensaje, categorias, historial=historial_para_ia)
         intencion = datos_ia.get("intencion", "OTRO")
 
         # Inyectar las categorías en los datos para que los handlers puedan validar
