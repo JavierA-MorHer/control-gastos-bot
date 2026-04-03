@@ -1,36 +1,28 @@
-from fastapi import FastAPI, Depends
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.future import select
+"""
+Punto de entrada de la aplicación FastAPI.
+Responsabilidad: crear la app, registrar routers y manejar el startup de la DB.
+"""
+from fastapi import FastAPI
 from api.webhook import router as webhook_router
-from db.database import engine, Base, get_db
-from db.models import Usuario
+from db.database import engine, Base
 
 app = FastAPI(title="Control Gastos Bot")
 
-# Registramos el router de webhook
+# Registrar routers
 app.include_router(webhook_router, prefix="/api")
 
+
 @app.get("/")
-async def ruta_principal(db: AsyncSession = Depends(get_db)):
-    try:
-        # Consultamos los primeros 5 usuarios para verificar la conexión
-        query = select(Usuario).limit(5)
-        resultado = await db.execute(query)
-        usuarios = resultado.scalars().all()
-        
-        lista_usuarios = [{"id": u.id, "whatsapp": u.telefono_whatsapp, "nombre": u.nombre} for u in usuarios]
-        
-        return {
-            "mensaje": "¡Conectado exitosamente a Neon DB!",
-            "cantidad_usuarios": len(lista_usuarios),
-            "usuarios_ejemplo": lista_usuarios
-        }
-    except Exception as e:
-        return {"error_bd": str(e)}
+async def health_check():
+    """Ruta de verificación de salud del servidor."""
+    return {"status": "ok", "mensaje": "Control Gastos Bot está en línea 🚀"}
+
 
 @app.on_event("startup")
 async def startup():
-    # Creamos las tablas en Neon si no existen
-    from db.models import Usuario, Gasto, Presupuesto
+    """Crea las tablas en Neon DB si no existen."""
+    # Importamos todos los modelos para que SQLAlchemy los registre
+    from db.models import Usuario, Gasto, Presupuesto, CategoriaUsuario  # noqa: F401
+
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)

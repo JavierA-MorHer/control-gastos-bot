@@ -18,6 +18,17 @@ class Usuario(Base):
     # Relaciones
     gastos = relationship("Gasto", back_populates="usuario", cascade="all, delete-orphan")
     presupuestos = relationship("Presupuesto", back_populates="usuario", cascade="all, delete-orphan")
+    categorias_personalizadas = relationship("CategoriaUsuario", back_populates="usuario", cascade="all, delete-orphan")
+
+class CategoriaUsuario(Base):
+    __tablename__ = "categorias_usuario"
+
+    id = Column(Integer, primary_key=True)
+    usuario_id = Column(Integer, ForeignKey("usuarios.id", ondelete="CASCADE"), nullable=False)
+    nombre = Column(String(50), nullable=False)
+    fecha_creacion = Column(DateTime, server_default=func.now())
+
+    usuario = relationship("Usuario", back_populates="categorias_personalizadas")
 
 class Presupuesto(Base):
     __tablename__ = "presupuestos"
