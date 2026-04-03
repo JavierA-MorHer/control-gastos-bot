@@ -31,6 +31,6 @@ async def ruta_principal(db: AsyncSession = Depends(get_db)):
 @app.on_event("startup")
 async def startup():
     # Creamos las tablas en Neon si no existen
-    from db.models import Usuario, Gasto
+    from db.models import Usuario, Gasto, Presupuesto
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)

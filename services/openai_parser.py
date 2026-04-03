@@ -6,34 +6,41 @@ from datetime import datetime
 # Cliente de OpenAI (se inicializará si hay API key)
 client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY) if settings.OPENAI_API_KEY else None
 
-# Instrucciones del sistema principal
 system_instruction = """
-Eres un asistente financiero. Tienes 2 tareas: categorizar gastos o entender solicitudes de reportes.
+Eres un asistente financiero. Tienes 3 tareas principales: categorizar gastos, entender solicitudes de presupuestos, o entender solicitudes de reportes.
+También debes reconocer cuando el usuario confirma o rechaza algo.
 Devuelve SIEMPRE un JSON válido con esta estructura estricta:
 {
-  "intencion": "GASTO" o "REPORTE_GENERAL" o "REPORTE_ESPECIFICO" o "OTRO",
+  "intencion": "GASTO" o "REPORTE_GENERAL" o "REPORTE_ESPECIFICO" o "PRESUPUESTO" o "CONFIRMACION" o "OTRO",
   "monto": 0.0,
   "categoria": "...",
   "descripcion": "...",
   "fecha_inicio": "YYYY-MM-DD",
-  "fecha_fin": "YYYY-MM-DD"
+  "fecha_fin": "YYYY-MM-DD",
+  "confirmado": true o false
 }
 
 REGLAS PARA "GASTO":
-- El usuario habla de un gasto o compra, ejemplo: "pizza 300", "me gasté 100 en un taxi", "super 500".
-- "monto": coste de lo comprado (number float).
-- "categoria": DEBES elegir ESTRICTAMENTE de: ["Comida", "Transporte", "Servicios", "Cuidado Personal", "Salud", "Entretenimiento", "Compras", "Regalos", "Otros"]. Por ejemplo, crema es Cuidado Personal.
-- "descripcion": resumen del gasto.
+- El usuario habla de un gasto o compra, ejemplo: "pizza 300".
+- "monto": coste (number float).
+- "categoria": ESTRICTAMENTE de: ["Comida", "Transporte", "Servicios", "Cuidado Personal", "Salud", "Entretenimiento", "Compras", "Regalos", "Otros"].
+- "descripcion": resumen.
 
-REGLAS PARA "REPORTE_GENERAL":
-- El usuario pide un reporte general sin especificar fechas concretas: "dame un reporte", "quiero un informe".
+REGLAS PARA "PRESUPUESTO":
+- El usuario indica cuánto planea gastar en una categoría, ej: "mi presupuesto de comida es 1000", "1000 para restaurantes de presupuesto".
+- "monto": cantidad asignada.
+- "categoria": Misma lista del GASTO.
 
-REGLAS PARA "REPORTE_ESPECIFICO":
-- El usuario proporciona un contexto de tiempo: "gastos de ayer", "cuanto gaste este mes", "reporte de marzo".
-- IMPORTANTE: Usa la fecha exacta que te proporcionaré (HOY ES...) para deducir fechas exactas. Deduce `fecha_inicio` y `fecha_fin` en formato "YYYY-MM-DD". Ejemplo: Si hoy es martes 5 y piden "ayer", pon "YYYY-MM-04".
+REGLAS PARA "CONFIRMACION":
+- El usuario dice "sí", "claro", "actualízalo", "no", "cancela".
+- "confirmado": true si es afirmativo, false si es negativo.
+
+REGLAS PARA "REPORTE_GENERAL" y "REPORTE_ESPECIFICO":
+- Para GENERAL: "dame un reporte", "quiero un informe".
+- Para ESPECIFICO: Da un periodo "gastos de ayer". Deduce fechas EXACTAS "YYYY-MM-DD" usando (HOY ES...).
 
 REGLAS PARA "OTRO":
-- El usuario saluda ("hola", "buen día") que no requiera el guardado de algo numérico.
+- Saludos u otras charlas ("hola").
 """
 
 async def analizar_mensaje_gasto_openai(texto: str) -> dict:
@@ -62,7 +69,8 @@ async def analizar_mensaje_gasto_openai(texto: str) -> dict:
             "categoria": str(datos.get("categoria", "Otros")).title(),
             "descripcion": str(datos.get("descripcion", texto)),
             "fecha_inicio": str(datos.get("fecha_inicio", "")),
-            "fecha_fin": str(datos.get("fecha_fin", ""))
+            "fecha_fin": str(datos.get("fecha_fin", "")),
+            "confirmado": bool(datos.get("confirmado", False))
         }
     except Exception as e:
         print(f"Error interpretando con OpenAI: {e}")

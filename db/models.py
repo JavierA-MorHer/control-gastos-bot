@@ -11,9 +11,24 @@ class Usuario(Base):
     telefono_whatsapp = Column(String(50), unique=True, nullable=False)
     nombre = Column(String(100), nullable=True)
     fecha_creacion = Column(DateTime, server_default=func.now())
+    
+    # Campo para manejar el estado de la conversacion (ej. esperando que confirme actualizacion de presupuesto)
+    estado_conversacion = Column(JSONB, nullable=True)
 
-    # Relación uno-a-muchos con Gastos (Si se borra el usuario se borran sus gastos)
+    # Relaciones
     gastos = relationship("Gasto", back_populates="usuario", cascade="all, delete-orphan")
+    presupuestos = relationship("Presupuesto", back_populates="usuario", cascade="all, delete-orphan")
+
+class Presupuesto(Base):
+    __tablename__ = "presupuestos"
+
+    id = Column(Integer, primary_key=True)
+    usuario_id = Column(Integer, ForeignKey("usuarios.id", ondelete="CASCADE"), nullable=False)
+    categoria = Column(String(50), nullable=False)
+    monto = Column(DECIMAL(12, 2), nullable=False)
+    fecha_creacion = Column(DateTime, server_default=func.now())
+
+    usuario = relationship("Usuario", back_populates="presupuestos")
 
 class Gasto(Base):
     __tablename__ = "gastos"
